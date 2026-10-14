@@ -12,6 +12,7 @@ hosts の編集には管理者権限 (Windows: 管理者として実行 / Linux�
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -55,11 +56,19 @@ def normalize(text):
     return s if s and "." in s else None
 
 
+def valid_domain(d):
+    return isinstance(d, str) and re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z0-9-]+", d) is not None
+
+
 def load_config():
+    # 設定ファイルは一般ユーザーが書ける(GUI用)が、hosts を書くのは root のデーモン。
+    # 不正な値(改行入りドメイン等)で hosts に任意行を注入されないよう読み込み時に検証する。
     try:
         d = json.loads(CONFIG.read_text(encoding="utf-8"))
-        return {"schedules": list(d.get("schedules", [])), "sites": list(d.get("sites", DEFAULT_SITES))}
-    except (OSError, ValueError):
+        scheds = [{"start": int(x["start"]), "end": int(x["end"]), "enabled": bool(x.get("enabled", True))}
+                  for x in d.get("schedules", []) if 0 <= int(x["start"]) < 1440 and 0 <= int(x["end"]) < 1440]
+        return {"schedules": scheds, "sites": [x for x in d.get("sites", DEFAULT_SITES) if valid_domain(x)]}
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return {"schedules": [], "sites": list(DEFAULT_SITES)}
 
 
@@ -152,7 +161,10 @@ def gui():
             site_box.insert(tk.END, d)
         save_config(cfg)
         try:
-            status.set("現在: " + ("ブロック中" if tick(cfg) else "ブロックなし"))
+            if os.environ.get("YTBLOCKER_GUI_ONLY"):
+                status.set("現在: %s (常駐デーモンが30秒以内に反映)" % ("ブロック中" if blocked_now(cfg) else "ブロックなし"))
+            else:
+                status.set("現在: " + ("ブロック中" if tick(cfg) else "ブロックなし"))
         except PermissionError:
             status.set("hosts 書込権限なし (管理者で実行してください)")
 

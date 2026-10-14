@@ -14,21 +14,17 @@ python ytblocker_pc.py --unblock # hosts から本アプリの記述を除去
 - ブラウザの「セキュアDNS(DoH)」が有効だと回避されるため、オフ推奨。反映されない時はブラウザ再起動/DNSキャッシュ削除。
 - 設定は `~/.ytblocker_pc.json`。
 
-## macOS で使う
+## macOS で使う (常駐 + アプリ)
 
 ```bash
-# 設定GUI (hosts を書くので sudo 必須)
-sudo python3 ytblocker_pc.py
-
-# 常駐 (ログイン不要・起動時から自動):
-sudo mkdir -p /usr/local/ytblocker
-sudo cp ytblocker_pc.py /usr/local/ytblocker/
-sudo cp com.ytblocker.pc.plist /Library/LaunchDaemons/
-sudo launchctl load /Library/LaunchDaemons/com.ytblocker.pc.plist
-# 停止: sudo launchctl unload /Library/LaunchDaemons/com.ytblocker.pc.plist && sudo python3 ytblocker_pc.py --unblock
+cd pc
+sudo ./install_mac.sh            # 常駐デーモン(起動時から自動) + /Applications/YTBlocker.app を作成
+sudo ./install_mac.sh --uninstall  # 完全削除 (hosts も元に戻す)
 ```
 
-- `sudo` で GUI を起動すると設定は root の `~/.ytblocker_pc.json` に保存されます。常駐側は
-  `/usr/local/ytblocker/config.json` を読むので、`sudo YTBLOCKER_CONFIG=/usr/local/ytblocker/config.json python3 ytblocker_pc.py` で GUI を開くと設定が共有されます。
-- hosts 変更後、DNS キャッシュは自動で flush します。それでも効かない時はブラウザを再起動 (Chrome の「セキュアDNS」はオフに)。
-- macOS 標準の Python 3 の tkinter が動かない場合は `brew install python-tk` か python.org 版を使ってください。
+- **常駐**: launchd デーモンが root で30秒ごとに時間帯を見て hosts を更新します。再起動後も自動で動きます。
+- **YTBlocker.app**: 時間帯とドメインを編集する設定画面です。保存した内容は30秒以内にデーモンへ反映されます (sudo 不要。admin ユーザー向け)。
+- 設定は `/usr/local/ytblocker/config.json`。デーモンは読み込み時に時間帯・ドメインを検証します。
+- 初回起動で「開発元が未確認」と出たら、右クリック → 開く。tkinter が動かない場合は `brew install python-tk`。
+- hosts 変更後は DNS キャッシュを自動で flush します。Chrome の「セキュアDNS」はオフに。
+- 簡易利用(常駐なし): `sudo python3 ytblocker_pc.py`。
