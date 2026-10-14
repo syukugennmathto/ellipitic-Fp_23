@@ -12,6 +12,7 @@ hosts の編集には管理者権限 (Windows: 管理者として実行 / Linux�
 """
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -99,7 +100,19 @@ def apply_hosts(cfg, block):
     if new == text:
         return False
     HOSTS.write_text(new, encoding="utf-8")
+    flush_dns()
     return True
+
+
+def flush_dns():
+    """hosts 変更を即反映させる (macOS / Windows)。失敗しても無視。"""
+    cmds = {"darwin": [["dscacheutil", "-flushcache"], ["killall", "-HUP", "mDNSResponder"]],
+            "win32": [["ipconfig", "/flushdns"]]}.get(sys.platform, [])
+    for c in cmds:
+        try:
+            subprocess.run(c, capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
 
 def tick(cfg=None):
