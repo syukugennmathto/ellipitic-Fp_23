@@ -45,8 +45,8 @@ cat > "$A/Contents/Info.plist" <<PL
 PL
 cat > "$A/Contents/MacOS/YTBlocker" <<SH
 #!/bin/bash
-export YTBLOCKER_CONFIG=$D/config.json YTBLOCKER_GUI_ONLY=1
-exec /usr/bin/python3 $D/ytblocker_pc.py
+export YTBLOCKER_CONFIG=$D/config.json
+exec /usr/bin/python3 $D/ytblocker_pc.py --web
 SH
 chmod 755 "$A/Contents/MacOS/YTBlocker"
 echo "完了: 常駐デーモン登録済み。/Applications/YTBlocker.app で時間帯を設定してください。"

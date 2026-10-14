@@ -23,8 +23,8 @@ sudo ./install_mac.sh --uninstall  # 完全削除 (hosts も元に戻す)
 ```
 
 - **常駐**: launchd デーモンが root で30秒ごとに時間帯を見て hosts を更新します。再起動後も自動で動きます。
-- **YTBlocker.app**: 時間帯とドメインを編集する設定画面です。保存した内容は30秒以内にデーモンへ反映されます (sudo 不要。admin ユーザー向け)。
+- **YTBlocker.app**: 時間帯とドメインを編集する設定画面です (ブラウザで開く 127.0.0.1 限定のページ。tkinter 不要)。保存した内容は30秒以内にデーモンへ反映されます (sudo 不要。admin ユーザー向け)。
 - 設定は `/usr/local/ytblocker/config.json`。デーモンは読み込み時に時間帯・ドメインを検証します。
-- 初回起動で「開発元が未確認」と出たら、右クリック → 開く。tkinter が動かない場合は `brew install python-tk`。
+- 初回起動で「開発元が未確認」と出たら、右クリック → 開く。
 - hosts 変更後は DNS キャッシュを自動で flush します。Chrome の「セキュアDNS」はオフに。
 - 簡易利用(常駐なし): `sudo python3 ytblocker_pc.py`。

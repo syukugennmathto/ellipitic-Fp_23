@@ -3,7 +3,7 @@
 Android版(claude-daily-routines)のPC移植。ブロック対象ドメイン(既定: youtube.com 等)を、
 設定した時間帯だけ hosts ファイルで 127.0.0.1 に向けて遮断する。深夜またぎ対応。
 
-  python ytblocker_pc.py          # 設定GUI (時間帯・ドメインの編集、状態の反映)
+  python ytblocker_pc.py          # 設定GUI(tkinter) / --web: ブラウザで開く設定画面
   python ytblocker_pc.py --daemon # GUIなしで常駐 (30秒ごとに hosts を更新)
   python ytblocker_pc.py --unblock# hosts から本アプリの記述を除去
 
@@ -218,9 +218,103 @@ def gui():
     root.mainloop()
 
 
+PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>YouTube Blocker</title><style>body{font:16px system-ui;max-width:520px;margin:2em auto;padding:0 1em}
+li{display:flex;gap:.5em;align-items:center;margin:.3em 0}button{cursor:pointer}#st{padding:.6em;background:#eef;border-radius:8px}</style>
+<h2>YouTube Blocker</h2><p id=st></p>
+<h3>ブロック時間帯</h3><ul id=sc></ul>
+<form id=fs>開始 <input type=time id=a required> 終了 <input type=time id=b required> <button>追加</button></form>
+<small>終了が開始より前なら深夜またぎ (例 22:00 → 07:00)</small>
+<h3>ブロック対象ドメイン</h3><ul id=si></ul>
+<form id=fd><input id=d placeholder="example.com" required> <button>追加</button></form>
+<script>
+const T=new URLSearchParams(location.search).get("t");let C;
+const api=(m,b)=>fetch("/api?t="+T,{method:m,body:b&&JSON.stringify(b)}).then(r=>r.json());
+const tm=x=>String(x/60|0).padStart(2,0)+":"+String(x%60).padStart(2,0);
+const pm=v=>{const[h,m]=v.split(":");return h*60+ +m};
+function draw(r){C=r.cfg;st.textContent="現在: "+(r.blocked?"ブロック中":"ブロックなし")+" (常駐デーモンが30秒以内に反映)";
+sc.innerHTML="";C.schedules.forEach((s,i)=>{const l=document.createElement("li");
+l.innerHTML=tm(s.start)+" - "+tm(s.end)+" <button>"+(s.enabled?"ON":"OFF")+"</button> <button>削除</button>";
+l.children[0].onclick=()=>{s.enabled=!s.enabled;save()};l.children[1].onclick=()=>{C.schedules.splice(i,1);save()};sc.append(l)});
+si.innerHTML="";C.sites.forEach((d,i)=>{const l=document.createElement("li");l.textContent=d+" ";const b=document.createElement("button");
+b.textContent="削除";b.onclick=()=>{C.sites.splice(i,1);save()};l.append(b);si.append(l)})}
+const save=()=>api("POST",C).then(draw);
+fs.onsubmit=e=>{e.preventDefault();C.schedules.push({start:pm(a.value),end:pm(b.value),enabled:true});save()};
+fd.onsubmit=e=>{e.preventDefault();C.sites.push(d.value);d.value="";save()};
+api("GET").then(draw);
+</script>"""
+
+
+def web():
+    """ブラウザで開く設定画面 (127.0.0.1 限定・ランダムトークン必須)。10分操作が無ければ終了。"""
+    import secrets
+    import threading
+    import webbrowser
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import parse_qs, urlparse
+
+    token = secrets.token_urlsafe(16)
+    last = [time.time()]
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _ok(self):
+            last[0] = time.time()
+            q = parse_qs(urlparse(self.path).query)
+            return (self.headers.get("Host", "").split(":")[0] in ("127.0.0.1", "localhost")
+                    and q.get("t", [""])[0] == token)
+
+        def _send(self, code, body, ctype="application/json"):
+            b = body.encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", ctype + "; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def _state(self):
+            cfg = load_config()
+            return json.dumps({"cfg": cfg, "blocked": blocked_now(cfg)})
+
+        def do_GET(self):
+            if not self._ok():
+                return self._send(403, "forbidden", "text/plain")
+            if urlparse(self.path).path == "/api":
+                return self._send(200, self._state())
+            self._send(200, PAGE, "text/html")
+
+        def do_POST(self):
+            if not self._ok():
+                return self._send(403, "forbidden", "text/plain")
+            try:
+                d = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                sites = [x for x in (normalize(str(x)) for x in d["sites"]) if x and valid_domain(x)]
+                save_config({"schedules": d["schedules"], "sites": list(dict.fromkeys(sites))})
+            except (ValueError, KeyError, TypeError):
+                return self._send(400, "bad request", "text/plain")
+            self._send(200, self._state())
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    url = "http://127.0.0.1:%d/?t=%s" % (srv.server_port, token)
+    print("設定画面:", url, flush=True)
+
+    def watchdog():
+        while time.time() - last[0] < 600:
+            time.sleep(5)
+        srv.shutdown()
+
+    threading.Thread(target=watchdog, daemon=True).start()
+    webbrowser.open(url)
+    srv.serve_forever()
+
+
 if __name__ == "__main__":
     if "--unblock" in sys.argv:
         apply_hosts({"sites": []}, False)
+    elif "--web" in sys.argv:
+        web()
     elif "--daemon" in sys.argv:
         daemon()
     else:
